@@ -40,10 +40,7 @@ export function importFromStackprof(stackprofProfile: StackprofProfile): Profile
         frameName = '(unknown)'
       }
       const frame = {
-        // Use a similar trick to https://github.com/tmm1/stackprof/pull/213
-        // generates a unique key for the name id + call line.
-        // Converts to a string to prevent truncation from BigInt to number
-        key: ((BigInt(id) << BigInt(16)) | BigInt(lineNo ? lineNo : 0)).toString(10),
+        key: bitShiftXorNumbers(id, lineNo ? lineNo : 0),
         ...frames[id],
         line: lineNo,
         name: frameName,
@@ -75,4 +72,22 @@ export function importFromStackprof(stackprofProfile: StackprofProfile): Profile
   }
 
   return profile.build()
+}
+
+/*
+This is not really generalizable, just meant to be a relatively fast way to
+combine the two numbers while not losing precision. We can't use the same
+representation that stackprof uses of just bit shifting, so we "hash" them
+by bit shifting and Xoring them.
+*/
+function bitShiftXorNumbers(num1: number, num2: number): number {
+  const prime1 = 31 // A small prime number to "seed" the "hash"
+  const prime2 = 37 // Another small prime number
+
+  // Use a combination of multiplication and addition to reduce collision risk
+  const hash1 = (num1 * prime1) ^ (num1 >> 16) // XOR with a right shift of num1
+  const hash2 = (num2 * prime2) ^ (num2 << 8) // XOR with a left shift of num2
+
+  // Shift hash1 left to make room for hash2 and combine them
+  return (hash1 << 16) ^ hash2
 }
